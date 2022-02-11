@@ -1,0 +1,12 @@
+
+*pyo
+*.pyc 
+fifo1
+fifo2
+fifo3
+fifo4
+csv
+zip
+raw
+tmp
+*.sqlite
