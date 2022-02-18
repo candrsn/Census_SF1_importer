@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export TMPDIR=$HOME/tmp/
+``
 # stop on error
 set -e
 
@@ -113,6 +115,7 @@ echo ".mode csv
 
     " | tee tbl.sql | sqlite3 $DB
 
+    # if the fifo is still open, close it
     kill `jobs -p` | :
 
 }
@@ -140,22 +143,44 @@ prepare_extracts() {
 }
 
 pseudo_table_names() {
+    #pseudo table names may have a tailing '0' as a spacer.  This was to make column names a fixed width
     echo "
 .mode list
-.separator \" \"
-SELECT DISTINCT substr(name, 1, length(name) -3)
-    FROM pragma_table_info('$1') 
-    WHERE cid >= 5 
-    ORDER BY cid;
+.separator \"|\"
+SELECT
+   ptable, 
+   substr(pxtable,1, instr(pxtable,'0') -1) ||
+   ltrim(substr(pxtable,instr(pxtable,'0')), '0') as tnum
+FROM (
+   SELECT 
+     CASE
+        WHEN substr(ptable,length(ptable),1) = '0' THEN substr(ptable, 1, length(ptable) -1)
+        ELSE ptable
+      END as pxtable,
+      ptable
+
+      FROM (
+        SELECT DISTINCT substr(name, 1, length(name) -3) as ptable
+          FROM pragma_table_info('${1}') 
+--          FROM pragma_table_info('SF1_00047') 
+          WHERE cid >= 5 
+          ORDER BY cid) as p
+    ) as q;
 " | sqlite3 $DB
 
 }
+
 
 pseudo_table_cols() {
     echo "
 .mode list
 .separator \" \" \",\"
-SELECT '$3' || name FROM pragma_table_info('$1') 
+SELECT 
+    CASE
+       WHEN cid >= 5 THEN '$4' || name || ' as ${3}_' || ltrim(substr(name, -3, 3), '0')
+       ELSE  '$4' || name
+    END
+    FROM pragma_table_info('$1')
     WHERE cid < 5 OR
        name like '${2}%'
     ORDER BY cid;
@@ -172,32 +197,53 @@ pseudo_table_name_to_file() {
 }
 
 extract_sumlevel() {
-    sumlevel=${1:1:3}
-    component=${1:4:2}
-    if [ -n "$sumlevel" ]; then
+
+    # split the input into a sumlevel and a component
+    sumlevel="${1:0:3}"
+    component="${1:4:2}"
+    if [ -z "$sumlevel" ]; then
         echo "failed to parse $1 into ::$sumlevel::$component" >&2
         return
     fi
 
     echo "Extracting sumlevel: $sumlevel, component: $component"
 
-    mkdir -p csv/${ST}/${sumlev}/${component}
+    mkdir -p csv/${ST}/${sumlevel}/${component}
 
+    # extract the geograohy tBLE FOR THE SUMLEVEL
+
+    # find the SF1 table of segments
     for tbl in $(echo "SELECT name FROM SQLITE_MASTER WHERE name like 'SF1%' and type = 'table'" | sqlite3 $DB); do
         prepare_extracts $tbl
         ( echo "
           DROP TABLE IF EXISTS temp.geo_temp;
-          CREATE TEMP TABLE geo_temp AS SELECT * FROM GEO_HEADER_SF1 WHERE sumlevel = '$sumlev' and component = '$component';
+          CREATE TEMP TABLE geo_temp AS SELECT * FROM GEO_HEADER_SF1 WHERE sumlevel = '$sumlevel' and component = '$component';
           CREATE INDEX geo_temp__logrecno__ind on geo_temp(logrecno);
 "
-        
+
+    # extract the geography table for the sumlevel if it does not already exist
+        geoname="GEO_HEADER_SF1"
+        if [ ! -s "csv/${ST}/${sumlevel}/${component}/${geoname}.csv" ]; then
+          echo "
+.mode csv
+.headers on
+.once 'csv/${ST}/${sumlevel}/${component}/${geoname}.csv'
+SELECT * FROM temp.geo_temp
+    ORDER BY logrecno;        
+        "
+        fi
+
+
+        # convert the column names in the table of segments into detaill table names        
         for ptbl in $(pseudo_table_names $tbl); do
-            pcols=$(pseudo_table_cols $tbl $ptbl t.)
+            ptbl1=$(echo $ptbl | awk -e 'BEGIN {FS="|";} /./ { print $1;}')
+            ptbl2=$(echo $ptbl | awk -e 'BEGIN {FS="|";} /./ { print $2;}')
+            pcols=$(pseudo_table_cols $tbl $ptbl1 $ptbl2 t.)
             echo "
 .mode csv
 .headers on
-.once 'csv/${ST}/${sumlev}/${component}/${ptbl}.csv'
-SELECT $pcols 
+.once 'csv/${ST}/${sumlevel}/${component}/${ptbl2}.csv'
+SELECT $pcols
     FROM $tbl t,
        geo_temp g
     WHERE g.logrecno = t.logrecno;
@@ -206,12 +252,12 @@ SELECT $pcols
         done ) | tee tmp/extract_$tbl.sql | sqlite3 $DB
     done
 
-
 }
 
 extract_sumlevels() {
+    # get a list of all possible sumlevels and components
     for itm in $(echo "SELECT DISTINCT sumlevel, component FROM GEO_HEADER_SF1 ORDER BY sumlevel, component;" | sqlite3 $DB); do
-        extract_sumlevel $itm
+        extract_sumlevel "$itm"
     done
 }
 
@@ -229,5 +275,6 @@ create_tables
 load_tables
 }
 
-build_db
+#build_db
+
 extract_sumlevels
