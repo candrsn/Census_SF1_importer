@@ -1,7 +1,7 @@
 #!/bin/bash
 
 export TMPDIR=$HOME/tmp/
-``
+
 # stop on error
 set -e
 
@@ -14,7 +14,14 @@ MDB_TEMPLATE="SF1_Access2003.mdb"
 ZF="zip/${ST}2010.sf1.zip"
 DDLDIR="ddl/"
 DB=sf1_${ST}.sqlite
-
+if [ -z "$2" ]; then
+    FIFONAME="${TMPDIR}fifo_${RANDOM}"
+    if [ ! -r $FIFONAME ]; then
+        mkfifo $FIFONAME
+    fi
+else
+    export FIFONAME="$2"
+fi
 
 usage() {
     echo "import_state.sh <state code>" >&2
@@ -88,12 +95,12 @@ load_geo() {
 
     tbl="GEO_HEADER_SF1"
 
-    unzip -p $ZF $itm | awk -f import_geo.awk >> fifo1 &
+    unzip -p $ZF $itm | awk -f import_geo.awk >> ${FIFONAME} &
 
 echo ".mode tab
 .headers off
 .separator '|'
-.import 'fifo1' ${tbl}
+.import '$FIFONAME' ${tbl}
 
 
     " | tee tbl.sql | sqlite3 $DB 
@@ -106,11 +113,11 @@ load_table() {
 
     tbl=$(txtname_to_tblname $itm)
 
-    unzip -p $ZF $itm >> fifo1 &
+    unzip -p $ZF $itm >> $FIFONAME &
 
 echo ".mode csv
 .headers off
-.import 'fifo1' ${tbl}
+.import '$FIFONAME' ${tbl}
 
 
     " | tee tbl.sql | sqlite3 $DB
@@ -256,9 +263,19 @@ SELECT $pcols
 
 extract_sumlevels() {
     # get a list of all possible sumlevels and components
-    for itm in $(echo "SELECT DISTINCT sumlevel, component FROM GEO_HEADER_SF1 ORDER BY sumlevel, component;" | sqlite3 $DB); do
+    if [ -z "$SL_LIST" ]; then
+        sl_list=$(echo "SELECT DISTINCT sumlevel, component FROM GEO_HEADER_SF1 ORDER BY sumlevel, component;" | sqlite3 $DB)
+    else
+        sl_list=$(echo $SL_LIST | tr ',' '\n')
+    fi
+
+    for itm in $SL_LIST; do
         extract_sumlevel "$itm"
     done
+}
+
+cleanup() {
+    rm $FIFONAME
 }
 
 build_db() {
@@ -275,6 +292,7 @@ create_tables
 load_tables
 }
 
-#build_db
-
+build_db
 extract_sumlevels
+
+cleanup

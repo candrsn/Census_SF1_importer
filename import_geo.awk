@@ -4,7 +4,7 @@ BEGIN { a=0; OFS="|"; }
 substr($0,7,2), \
 substr($0,9,3), \
 substr($0,12,2), \
-substr($0,14,33), \
+substr($0,14,3), \
 substr($0,17,2), \
 substr($0,19,7), \
 substr($0,26,1), \

@@ -1,13 +1,12 @@
+# .gitignore file
 
 *pyo
 *.pyc 
-fifo1
-fifo2
-fifo3
-fifo4
+fifo*
 csv
 zip
 raw
 tmp
 *.sqlite
-mdb
+*mdb
+*log
