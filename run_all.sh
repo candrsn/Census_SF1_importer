@@ -13,6 +13,7 @@ export SL_LIST="040|00,080|00,101|00,140|00,070|00,150|00,160|00"
 
 usage() {
      echo "run_all.sh <state list>"
+     exit 1
 }
 
 # unpack the list of statesccc
