@@ -234,9 +234,10 @@ extract_sumlevel() {
           echo "
 .mode csv
 .headers on
-.once 'csv/${ST}/${sumlevel}/${component}/${geoname}.csv'
+.output 'csv/${ST}/${sumlevel}/${component}/${geoname}.csv'
 SELECT * FROM temp.geo_temp
-    ORDER BY logrecno;        
+    ORDER BY logrecno;
+.output stdout
         "
         fi
 
@@ -249,11 +250,12 @@ SELECT * FROM temp.geo_temp
             echo "
 .mode csv
 .headers on
-.once 'csv/${ST}/${sumlevel}/${component}/${ptbl2}.csv'
+.output 'csv/${ST}/${sumlevel}/${component}/${ptbl2}.csv'
 SELECT $pcols
     FROM $tbl t,
        geo_temp g
     WHERE g.logrecno = t.logrecno;
+.output stdout
 " 
 
         done ) | tee tmp/extract_$tbl.sql | sqlite3 $DB

@@ -246,8 +246,12 @@ CREATE TABLE `SF1_00045`
 	`H017B0018`			INTEGER, 
 	`H017B0019`			INTEGER, 
 	`H017B0020`			INTEGER, 
-	`H017B0021`			INTEGER
-,
+	`H017B0021`			INTEGER,
+
+        `H017C0001`                     INTEGER,
+        `H017C0002`                     INTEGER,
+        `H017C0003`                     INTEGER,
+
 	`H017C0004`			INTEGER, 
 	`H017C0005`			INTEGER, 
 	`H017C0006`			INTEGER, 
